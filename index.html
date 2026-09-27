@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MNQ OIF Trade Planner</title>
+  <meta name="description" content="Static MNQ-only NinjaTrader OIF file generator, trade planner, live price viewer, CSV importer, and historical chart." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            ibmblue: {
+              50:'#edf5ff',100:'#d0e2ff',200:'#a6c8ff',300:'#78a9ff',
+              400:'#4589ff',500:'#0f62fe',600:'#0043ce',700:'#002d9c',
+              800:'#001d6c',900:'#001141'
+            }
+          },
+          fontFamily: { sans: ['IBM Plex Sans','Inter','Arial','sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root { --base-font-size: 16px; }
+    html { font-size: var(--base-font-size); }
+    body { font-family: "IBM Plex Sans", Inter, Arial, sans-serif; }
+    .card { border:1px solid rgb(226 232 240); background:white; }
+    .dark .card { border-color:rgb(51 65 85); background:rgb(15 23 42); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .focus-ring:focus { outline:3px solid #78a9ff; outline-offset:2px; }
+    dialog::backdrop { background: rgba(2,6,23,.65); }
+    input[type="number"] { appearance:textfield; }
+    .table-wrap { overflow-x:auto; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100 min-h-screen">
+  <header class="sticky top-0 z-40 bg-white/95 dark:bg-slate-950/95 border-b border-slate-200 dark:border-slate-800 backdrop-blur">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3 justify-between">
+      <div>
+        <div class="text-xs uppercase tracking-[.2em] text-ibmblue-600 dark:text-ibmblue-300 font-bold">NinjaTrader File Interface</div>
+        <h1 class="text-xl md:text-2xl font-semibold">MNQ OIF Trade Planner</h1>
+      </div>
+      <div class="flex flex-wrap gap-2 items-center">
+        <button id="fontDown" class="focus-ring px-3 py-2 border border-slate-300 dark:border-slate-700">A−</button>
+        <span id="fontSizeLabel" class="text-sm w-14 text-center">16px</span>
+        <button id="fontUp" class="focus-ring px-3 py-2 border border-slate-300 dark:border-slate-700">A+</button>
+        <button id="themeBtn" class="focus-ring px-3 py-2 bg-slate-900 text-white dark:bg-white dark:text-slate-950">Dark mode</button>
+        <button data-help="about" class="focus-ring px-3 py-2 bg-ibmblue-600 text-white">Help</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-4 space-y-5">
+    <section class="border-l-4 border-ibmblue-600 bg-ibmblue-50 dark:bg-slate-900 p-4">
+      <div class="flex flex-col lg:flex-row gap-4 justify-between">
+        <div>
+          <h2 class="font-semibold text-lg">What this page does</h2>
+          <p class="mt-1 max-w-4xl">
+            This is a static browser tool for planning <strong>MNQ Micro E-mini Nasdaq-100 futures</strong> trades,
+            viewing a price from a server you configure, importing historical CSV data, and exporting
+            NinjaTrader OIF text files. It does not connect directly to your brokerage by itself.
+          </p>
+        </div>
+        <div class="text-sm min-w-64">
+          <div class="font-semibold">Safety defaults</div>
+          <div>Instrument locked to MNQ</div>
+          <div>Account defaults to Sim101</div>
+          <div>Maximum quantity defaults to 1</div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="flex flex-wrap gap-2 text-sm">
+      <a class="px-3 py-2 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900" href="#price">Live Price</a>
+      <a class="px-3 py-2 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900" href="#oif">OIF Builder</a>
+      <a class="px-3 py-2 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900" href="#trades">Trades</a>
+      <a class="px-3 py-2 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900" href="#history">CSV / Chart</a>
+      <a class="px-3 py-2 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900" href="#tutorial">Tutorial</a>
+    </nav>
+
+    <section id="price" class="card p-5 shadow-sm">
+      <div class="flex flex-wrap justify-between gap-3 items-start">
+        <div>
+          <div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">MNQ live server</div>
+          <h2 class="text-2xl font-semibold">Current MNQ Value</h2>
+        </div>
+        <button data-help="server" class="text-ibmblue-600 dark:text-ibmblue-300 underline">How does this work?</button>
+      </div>
+      <div class="grid md:grid-cols-3 gap-4 mt-4">
+        <div class="md:col-span-1 border-l-4 border-ibmblue-500 p-4 bg-slate-50 dark:bg-slate-900">
+          <div class="text-sm text-slate-500 dark:text-slate-400">Last price</div>
+          <div id="livePrice" class="text-4xl font-semibold mt-1">—</div>
+          <div class="mt-2 text-sm">
+            <span id="serverState" class="font-semibold">Not connected</span><br>
+            <span id="lastUpdated">No update yet</span>
+          </div>
+        </div>
+
+        <form id="serverForm" class="md:col-span-2 grid sm:grid-cols-2 gap-3">
+          <label class="block sm:col-span-2">
+            <span class="text-sm font-semibold">Price API URL</span>
+            <input id="apiUrl" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                   placeholder="http://localhost:7777/api/mnq/price" />
+          </label>
+          <label class="block">
+            <span class="text-sm font-semibold">JSON price field</span>
+            <input id="priceField" value="price" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950" />
+          </label>
+          <label class="block">
+            <span class="text-sm font-semibold">Poll every (seconds)</span>
+            <input id="pollSeconds" type="number" min="1" value="30" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950" />
+          </label>
+          <label class="block sm:col-span-2">
+            <span class="text-sm font-semibold">Optional Authorization header</span>
+            <input id="authHeader" type="password" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                   placeholder="Bearer token-goes-here" autocomplete="off" />
+            <span class="text-xs text-slate-500">Stored only in this browser when you click Save. Avoid shared computers.</span>
+          </label>
+          <div class="sm:col-span-2 flex flex-wrap gap-2">
+            <button type="button" id="saveServer" class="focus-ring px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-950">Save config</button>
+            <button type="button" id="testServer" class="focus-ring px-4 py-2 bg-ibmblue-600 text-white">Test / Fetch now</button>
+            <button type="button" id="startPoll" class="focus-ring px-4 py-2 border border-slate-400 dark:border-slate-600">Start polling</button>
+            <button type="button" id="stopPoll" class="focus-ring px-4 py-2 border border-slate-400 dark:border-slate-600">Stop</button>
+            <button type="button" id="mockPrice" class="focus-ring px-4 py-2 border border-slate-400 dark:border-slate-600">Demo price</button>
+          </div>
+        </form>
+      </div>
+      <div id="serverMsg" class="mt-3 text-sm"></div>
+    </section>
+
+    <section id="oif" class="card p-5 shadow-sm">
+      <div class="flex flex-wrap justify-between gap-3 items-start">
+        <div>
+          <div class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">MNQ only</div>
+          <h2 class="text-2xl font-semibold">OIF File Builder</h2>
+          <p class="mt-1 text-sm max-w-3xl">Fill in the form, preview the semicolon-delimited NinjaTrader command, then export an <span class="mono">oif*.txt</span> file.</p>
+        </div>
+        <button data-help="oif" class="text-ibmblue-600 dark:text-ibmblue-300 underline">OIF help</button>
+      </div>
+
+      <form id="oifForm" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
+        <label>
+          <span class="text-sm font-semibold">Command</span>
+          <select id="command" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950">
+            <option>PLACE</option>
+            <option>REVERSEPOSITION</option>
+            <option>CANCEL</option>
+            <option>CHANGE</option>
+            <option>CLOSEPOSITION</option>
+            <option>CANCELALLORDERS</option>
+            <option>FLATTENEVERYTHING</option>
+            <option>CLOSESTRATEGY</option>
+          </select>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">Account</span>
+          <input id="account" value="Sim101" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"/>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">MNQ contract</span>
+          <input id="instrument" value="MNQ 12-26" pattern="MNQ .*" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"/>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">Action</span>
+          <select id="action" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950">
+            <option>BUY</option><option>SELL</option>
+          </select>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">Quantity</span>
+          <input id="qty" type="number" min="1" max="10" value="1" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"/>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">Max allowed quantity</span>
+          <input id="maxQty" type="number" min="1" max="100" value="1" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"/>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">Order type</span>
+          <select id="orderType" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950">
+            <option>MARKET</option><option>LIMIT</option><option>STOPMARKET</option><option>STOPLIMIT</option>
+          </select>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">TIF</span>
+          <select id="tif" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950">
+            <option>DAY</option><option>GTC</option>
+          </select>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">Limit price</span>
+          <input id="limitPrice" type="number" step="0.25" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"/>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">Stop price</span>
+          <input id="stopPrice" type="number" step="0.25" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"/>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">OCO ID</span>
+          <input id="ocoId" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950" placeholder="OCO-MNQ-001"/>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">Order ID</span>
+          <input id="orderId" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"/>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">ATM strategy template</span>
+          <input id="strategy" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950" placeholder="optional"/>
+        </label>
+        <label>
+          <span class="text-sm font-semibold">Strategy ID</span>
+          <input id="strategyId" class="focus-ring mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950" placeholder="optional"/>
+        </label>
+        <div class="sm:col-span-2">
+          <label class="inline-flex items-start gap-2">
+            <input id="liveAck" type="checkbox" class="mt-1">
+            <span><strong>Live account acknowledgment:</strong> I understand an exported OIF can become a real order if I place it in NinjaTrader's incoming folder and use a live account.</span>
+          </label>
+        </div>
+        <div class="sm:col-span-2 flex flex-wrap gap-2 items-end">
+          <button type="button" id="fillCurrent" class="focus-ring px-4 py-2 border border-slate-400 dark:border-slate-600">Use current price as limit</button>
+          <button type="button" id="addTradeFromOif" class="focus-ring px-4 py-2 border border-slate-400 dark:border-slate-600">Add to trade table</button>
+        </div>
+      </form>
+
+      <div class="mt-5 bg-slate-950 text-slate-100 p-4">
+        <div class="flex flex-wrap justify-between gap-2">
+          <span class="font-semibold">OIF preview</span>
+          <button id="copyOif" class="underline">Copy</button>
+        </div>
+        <pre id="oifPreview" class="mono whitespace-pre-wrap break-all mt-3 text-sm"></pre>
+      </div>
+
+      <div id="oifWarnings" class="mt-3"></div>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button id="generateId" class="focus-ring px-4 py-2 border border-slate-400 dark:border-slate-600">New Order ID</button>
+        <button id="exportOif" class="focus-ring px-4 py-2 bg-ibmblue-600 text-white">Export OIF .txt</button>
+        <button id="saveOifSettings" class="focus-ring px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-950">Save settings</button>
+      </div>
+    </section>
+
+    <section id="trades" class="card p-5 shadow-sm">
+      <div class="flex flex-wrap justify-between gap-3">
+        <div>
+          <h2 class="text-2xl font-semibold">Trade Planning Table</h2>
+          <p class="text-sm mt-1">Keep planned or completed MNQ trades in your browser. These rows do not send orders.</p>
+        </div>
+        <button data-help="trades" class="text-ibmblue-600 dark:text-ibmblue-300 underline">Table help</button>
+      </div>
+
+      <form id="tradeForm" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+        <label><span class="text-sm font-semibold">Date & time</span><input id="tradeDate" type="datetime-local" class="focus-ring mt-1 w-full p-2 border bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"></label>
+        <label><span class="text-sm font-semibold">Side</span><select id="tradeSide" class="focus-ring mt-1 w-full p-2 border bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"><option>BUY</option><option>SELL</option></select></label>
+        <label><span class="text-sm font-semibold">Quantity</span><input id="tradeQty" type="number" min="1" value="1" class="focus-ring mt-1 w-full p-2 border bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"></label>
+        <label><span class="text-sm font-semibold">Order type</span><select id="tradeType" class="focus-ring mt-1 w-full p-2 border bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"><option>LIMIT</option><option>MARKET</option><option>STOPMARKET</option><option>STOPLIMIT</option></select></label>
+        <label><span class="text-sm font-semibold">Limit / entry</span><input id="tradeLimit" type="number" step="0.25" class="focus-ring mt-1 w-full p-2 border bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"></label>
+        <label><span class="text-sm font-semibold">Stop value</span><input id="tradeStop" type="number" step="0.25" class="focus-ring mt-1 w-full p-2 border bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"></label>
+        <label><span class="text-sm font-semibold">Status</span><select id="tradeStatus" class="focus-ring mt-1 w-full p-2 border bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"><option>PLANNED</option><option>WORKING</option><option>FILLED</option><option>CANCELLED</option><option>REJECTED</option></select></label>
+        <label><span class="text-sm font-semibold">Notes</span><input id="tradeNotes" class="focus-ring mt-1 w-full p-2 border bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700" placeholder="Why this trade?"></label>
+        <div class="lg:col-span-4 flex flex-wrap gap-2">
+          <button class="focus-ring px-4 py-2 bg-ibmblue-600 text-white">Add trade</button>
+          <button type="button" id="exportTrades" class="focus-ring px-4 py-2 border border-slate-400 dark:border-slate-600">Export trades CSV</button>
+          <button type="button" id="clearTrades" class="focus-ring px-4 py-2 border border-red-400 text-red-700 dark:text-red-300">Clear table</button>
+        </div>
+      </form>
+
+      <div class="table-wrap mt-5">
+        <table class="w-full text-sm border-collapse">
+          <thead class="bg-slate-100 dark:bg-slate-900">
+            <tr>
+              <th class="text-left p-2 border dark:border-slate-700">Date / Time</th>
+              <th class="text-left p-2 border dark:border-slate-700">Instrument</th>
+              <th class="text-left p-2 border dark:border-slate-700">Side</th>
+              <th class="text-left p-2 border dark:border-slate-700">Qty</th>
+              <th class="text-left p-2 border dark:border-slate-700">Type</th>
+              <th class="text-left p-2 border dark:border-slate-700">Limit</th>
+              <th class="text-left p-2 border dark:border-slate-700">Stop</th>
+              <th class="text-left p-2 border dark:border-slate-700">Status</th>
+              <th class="text-left p-2 border dark:border-slate-700">Notes</th>
+              <th class="text-left p-2 border dark:border-slate-700">Action</th>
+            </tr>
+          </thead>
+          <tbody id="tradeRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="history" class="card p-5 shadow-sm">
+      <div class="flex flex-wrap justify-between gap-3">
+        <div>
+          <h2 class="text-2xl font-semibold">Historical MNQ CSV + Chart</h2>
+          <p class="text-sm mt-1">Import historical data to see what happened before. Historical movement does not predict the next trade.</p>
+        </div>
+        <button data-help="csv" class="text-ibmblue-600 dark:text-ibmblue-300 underline">CSV format help</button>
+      </div>
+
+      <div class="grid lg:grid-cols-3 gap-5 mt-5">
+        <div class="space-y-4">
+          <label class="block">
+            <span class="font-semibold">Select CSV file</span>
+            <input id="csvFile" type="file" accept=".csv,text/csv" class="focus-ring mt-2 block w-full">
+          </label>
+          <div class="text-sm bg-slate-50 dark:bg-slate-900 p-3">
+            <strong>Simple supported headers:</strong>
+            <div class="mono mt-2">date,time,open,close</div>
+            <div class="mt-2">Also accepts one combined column named <span class="mono">datetime</span>.</div>
+          </div>
+          <div id="csvStats" class="text-sm"></div>
+          <button id="clearHistory" class="focus-ring px-4 py-2 border border-red-400 text-red-700 dark:text-red-300">Clear imported history</button>
+        </div>
+        <div class="lg:col-span-2 min-h-[360px]">
+          <canvas id="historyChart"></canvas>
+        </div>
+      </div>
+
+      <div class="table-wrap mt-5 max-h-80 overflow-auto">
+        <table class="w-full text-sm border-collapse">
+          <thead class="bg-slate-100 dark:bg-slate-900 sticky top-0">
+            <tr><th class="p-2 border dark:border-slate-700 text-left">Date/Time</th><th class="p-2 border dark:border-slate-700 text-right">Open</th><th class="p-2 border dark:border-slate-700 text-right">Close</th><th class="p-2 border dark:border-slate-700 text-right">Change</th></tr>
+          </thead>
+          <tbody id="historyRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tutorial" class="card p-5 shadow-sm">
+      <h2 class="text-2xl font-semibold">Step-by-Step: Think of OIF Like a Note to NinjaTrader</h2>
+      <div class="grid md:grid-cols-2 gap-5 mt-5">
+        <div>
+          <h3 class="font-semibold text-lg">1. Build the instruction</h3>
+          <p class="mt-1">Choose BUY or SELL, quantity, order type, and prices. The instrument stays MNQ so the page cannot accidentally create an ES, NQ, stock, or crypto OIF.</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-lg">2. Read the preview</h3>
+          <p class="mt-1">The line uses semicolons like dividers in a form. For example, <span class="mono">PLACE;Sim101;MNQ 12-26;BUY;1;MARKET...</span></p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-lg">3. Export the text file</h3>
+          <p class="mt-1">The browser downloads a file whose name starts with <span class="mono">oif</span>. Your browser cannot safely write directly into NinjaTrader's watched folder.</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-lg">4. Move it to NinjaTrader</h3>
+          <p class="mt-1">NinjaTrader watches its <span class="mono">incoming</span> folder. NinjaTrader recommends unique OIF filenames and recommends moving or directly writing a finished file rather than copying a file that is still being written.</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-lg">5. Watch order status</h3>
+          <p class="mt-1">A separate local server can watch NinjaTrader's outgoing files and expose status to this browser page. This static page intentionally does not read your Windows filesystem.</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-lg">6. Practice first</h3>
+          <p class="mt-1">Use Sim101 while learning. A correct OIF placed into the live workflow can create a real futures order.</p>
+        </div>
+      </div>
+
+      <div class="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
+        <h3 class="font-semibold text-lg">Official references</h3>
+        <div class="mt-2 flex flex-col gap-2">
+          <a class="text-ibmblue-600 dark:text-ibmblue-300 underline" target="_blank" rel="noopener" href="https://static.ninjatrader.com/support/helpGuides/nt8/order_instruction_files_oif.htm">NinjaTrader — Order Instruction Files (OIF)</a>
+          <a class="text-ibmblue-600 dark:text-ibmblue-300 underline" target="_blank" rel="noopener" href="https://static.ninjatrader.com/support/helpGuides/nt8/commands_and_valid_parameters.htm">NinjaTrader — Commands and Valid Parameters</a>
+          <a class="text-ibmblue-600 dark:text-ibmblue-300 underline" target="_blank" rel="noopener" href="https://static.ninjatrader.com/support/helpGuides/nt8/information_update_files.htm">NinjaTrader — Information Update Files</a>
+          <a class="text-ibmblue-600 dark:text-ibmblue-300 underline" target="_blank" rel="noopener" href="https://www.cmegroup.com/markets/equities/nasdaq/micro-e-mini-nasdaq-100.html">CME Group — Micro E-mini Nasdaq-100 Futures</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-4 py-8 text-sm text-slate-500 dark:text-slate-400">
+    Educational trade-planning utility. Verify every order inside NinjaTrader. Futures can move quickly and involve substantial risk.
+  </footer>
+
+  <dialog id="helpDialog" class="w-[min(92vw,720px)] p-0 bg-white dark:bg-slate-950 text-slate-950 dark:text-slate-100 border border-slate-300 dark:border-slate-700">
+    <div class="p-5">
+      <div class="flex justify-between gap-4">
+        <h2 id="helpTitle" class="text-xl font-semibold">Help</h2>
+        <button id="closeHelp" class="text-xl px-2" aria-label="Close">×</button>
+      </div>
+      <div id="helpBody" class="mt-4 space-y-3"></div>
+    </div>
+  </dialog>
+
+<script>
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k, d){ try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+    set(k, v){ localStorage.setItem(k, JSON.stringify(v)); }
+  };
+
+  // ---------- Theme and font ----------
+  let fontSize = Number(store.get("mnqFontSize", 16));
+  const applyFont = () => {
+    fontSize = Math.max(14, Math.min(36, fontSize));
+    document.documentElement.style.setProperty("--base-font-size", fontSize + "px");
+    $("fontSizeLabel").textContent = fontSize + "px";
+    store.set("mnqFontSize", fontSize);
+  };
+  $("fontUp").onclick = () => { fontSize += 2; applyFont(); };
+  $("fontDown").onclick = () => { fontSize -= 2; applyFont(); };
+  applyFont();
+
+  const preferredTheme = store.get("mnqTheme", "light");
+  if (preferredTheme === "dark") document.documentElement.classList.add("dark");
+  const themeLabel = () => $("themeBtn").textContent = document.documentElement.classList.contains("dark") ? "Light mode" : "Dark mode";
+  themeLabel();
+  $("themeBtn").onclick = () => {
+    document.documentElement.classList.toggle("dark");
+    store.set("mnqTheme", document.documentElement.classList.contains("dark") ? "dark" : "light");
+    themeLabel();
+  };
+
+  // ---------- Help ----------
+  const helps = {
+    about: {
+      title:"About this static page",
+      body:`<p>No web server is included in this single HTML file. Most data stays in your browser using localStorage.</p>
+            <p>The live-price box can call a server that you provide. Your server must allow browser requests with CORS when this page is opened from another origin or from a file.</p>
+            <p>The page generates text. It does not automatically place a trade.</p>`
+    },
+    server: {
+      title:"Live MNQ price server",
+      body:`<p>Your server should return JSON, for example:</p>
+            <pre class="mono bg-slate-950 text-white p-3">{ "symbol": "MNQ", "price": 24512.25, "timestamp": "2026-09-27T17:30:00-05:00" }</pre>
+            <p>Set the URL and the JSON field containing the numeric price. The browser then uses <span class="mono">fetch()</span> to read it.</p>
+            <p>This page refuses obvious non-MNQ symbols if your response contains a <span class="mono">symbol</span> field.</p>`
+    },
+    oif: {
+      title:"OIF basics",
+      body:`<p>OIF means Order Instruction File. NinjaTrader expects semicolon-delimited text.</p>
+            <p>For a PLACE command, the main order is: command, account, instrument, action, quantity, order type, limit, stop, TIF, OCO ID, order ID, strategy, strategy ID.</p>
+            <p>This page supports PLACE, REVERSEPOSITION, CANCEL, CHANGE, CLOSEPOSITION, CANCELALLORDERS, FLATTENEVERYTHING, and CLOSESTRATEGY.</p>`
+    },
+    trades: {
+      title:"Trade planning table",
+      body:`<p>This is a notebook, not a broker ledger. Add planned or completed MNQ trades here so you can compare your idea with historical movement.</p>
+            <p>Rows are saved only in this browser and can be exported as CSV.</p>`
+    },
+    csv: {
+      title:"CSV import",
+      body:`<p>Use columns such as:</p>
+            <pre class="mono bg-slate-950 text-white p-3">date,time,open,close
+2026-09-25,09:30,24600.25,24618.50
+2026-09-25,09:31,24618.50,24612.00</pre>
+            <p>You can also use <span class="mono">datetime,open,close</span>. Header matching is case-insensitive.</p>
+            <p>This small parser supports ordinary comma-separated files. Complex quoted CSV files with embedded commas are better normalized before import.</p>`
+    }
+  };
+  document.querySelectorAll("[data-help]").forEach(btn => btn.onclick = () => {
+    const h = helps[btn.dataset.help];
+    $("helpTitle").textContent = h.title;
+    $("helpBody").innerHTML = h.body;
+    $("helpDialog").showModal();
+  });
+  $("closeHelp").onclick = () => $("helpDialog").close();
+
+  // ---------- Live server ----------
+  let pollHandle = null;
+  let currentPrice = null;
+  const serverDefaults = { apiUrl:"", priceField:"price", pollSeconds:30, authHeader:"" };
+  const serverConfig = Object.assign(serverDefaults, store.get("mnqServer", {}));
+  ["apiUrl","priceField","pollSeconds","authHeader"].forEach(k => $(k).value = serverConfig[k] ?? "");
+
+  $("saveServer").onclick = () => {
+    const cfg = {
+      apiUrl:$("apiUrl").value.trim(),
+      priceField:$("priceField").value.trim() || "price",
+      pollSeconds:Math.max(1, Number($("pollSeconds").value || 30)),
+      authHeader:$("authHeader").value.trim()
+    };
+    store.set("mnqServer", cfg);
+    $("serverMsg").textContent = "Server configuration saved in this browser.";
+  };
+
+  function getNested(obj, path) {
+    return path.split(".").reduce((a, k) => a && a[k], obj);
+  }
+  async function fetchPrice(){
+    const url = $("apiUrl").value.trim();
+    if (!url) throw new Error("Enter a price API URL first.");
+    const headers = {};
+    const auth = $("authHeader").value.trim();
+    if (auth) headers["Authorization"] = auth;
+    $("serverState").textContent = "Connecting…";
+    try {
+      const res = await fetch(url, {headers, cache:"no-store"});
+      if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.symbol && !String(data.symbol).toUpperCase().startsWith("MNQ")) {
+        throw new Error(`Server returned symbol "${data.symbol}". This page accepts MNQ only.`);
+      }
+      const p = Number(getNested(data, $("priceField").value.trim() || "price"));
+      if (!Number.isFinite(p) || p <= 0) throw new Error("The configured JSON price field did not contain a valid positive number.");
+      currentPrice = p;
+      $("livePrice").textContent = p.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+      $("serverState").textContent = "Connected";
+      $("lastUpdated").textContent = "Updated " + new Date().toLocaleString();
+      $("serverMsg").textContent = "MNQ price received successfully.";
+    } catch (e) {
+      $("serverState").textContent = "Error";
+      $("serverMsg").textContent = e.message + " If this is a browser CORS error, configure the server to allow this page's origin.";
+      throw e;
+    }
+  }
+  $("testServer").onclick = () => fetchPrice().catch(()=>{});
+  $("startPoll").onclick = () => {
+    clearInterval(pollHandle);
+    fetchPrice().catch(()=>{});
+    const secs = Math.max(1, Number($("pollSeconds").value || 30));
+    pollHandle = setInterval(() => fetchPrice().catch(()=>{}), secs*1000);
+    $("serverMsg").textContent = `Polling started every ${secs} seconds.`;
+  };
+  $("stopPoll").onclick = () => { clearInterval(pollHandle); pollHandle=null; $("serverMsg").textContent="Polling stopped."; };
+  $("mockPrice").onclick = () => {
+    currentPrice = 24500 + Math.round((Math.random()*200-100))*0.25;
+    $("livePrice").textContent = currentPrice.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    $("serverState").textContent = "Demo";
+    $("lastUpdated").textContent = "Demo value " + new Date().toLocaleTimeString();
+    $("serverMsg").textContent = "Demo mode only — this is a made-up price for testing the page.";
+  };
+
+  // ---------- OIF ----------
+  const oifIds = ["command","account","instrument","action","qty","maxQty","orderType","tif","limitPrice","stopPrice","ocoId","orderId","strategy","strategyId","liveAck"];
+  const clean = v => String(v ?? "").replace(/[;\r\n]/g," ").trim();
+  const isMnq = s => /^MNQ(\s|$)/i.test(String(s).trim());
+  function newOrderId(){
+    const d = new Date();
+    const pad = n => String(n).padStart(2,"0");
+    return `MNQ-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}-${Math.floor(Math.random()*900+100)}`;
+  }
+  if (!$("orderId").value) $("orderId").value = newOrderId();
+  $("generateId").onclick = e => { e.preventDefault(); $("orderId").value = newOrderId(); updateOif(); };
+
+  function buildOif() {
+    const c = $("command").value;
+    const acct = clean($("account").value);
+    const instr = clean($("instrument").value);
+    const act = $("action").value;
+    const qty = clean($("qty").value);
+    const typ = $("orderType").value;
+    const lim = clean($("limitPrice").value);
+    const stop = clean($("stopPrice").value);
+    const tif = $("tif").value;
+    const oco = clean($("ocoId").value);
+    const oid = clean($("orderId").value);
+    const strat = clean($("strategy").value);
+    const sid = clean($("strategyId").value);
+
+    if (["PLACE","REVERSEPOSITION"].includes(c))
+      return [c,acct,instr,act,qty,typ,lim,stop,tif,oco,oid,strat,sid].join(";");
+    if (c === "CANCEL")
+      return ["CANCEL","","","","","","","","","",oid,"",sid].join(";");
+    if (c === "CHANGE")
+      return ["CHANGE","","","",qty,"",lim || "0",stop || "0","","",oid,"",sid].join(";");
+    if (c === "CLOSEPOSITION")
+      return ["CLOSEPOSITION",acct,instr,"","","","","","","","","",""].join(";");
+    if (c === "CLOSESTRATEGY")
+      return ["CLOSESTRATEGY","","","","","","","","","","","",sid].join(";");
+    if (c === "CANCELALLORDERS")
+      return ["CANCELALLORDERS","","","","","","","","","","","",""].join(";");
+    if (c === "FLATTENEVERYTHING")
+      return ["FLATTENEVERYTHING","","","","","","","","","","","",""].join(";");
+    return "";
+  }
+
+  function validateOif() {
+    const errs=[], warns=[];
+    const c=$("command").value, acct=$("account").value.trim(), instr=$("instrument").value.trim();
+    const qty=Number($("qty").value), maxQty=Number($("maxQty").value);
+    const lim=$("limitPrice").value, stop=$("stopPrice").value, typ=$("orderType").value;
+    if (["PLACE","REVERSEPOSITION","CLOSEPOSITION"].includes(c) && !isMnq(instr)) errs.push("Instrument must begin with MNQ.");
+    if (["PLACE","REVERSEPOSITION","CHANGE"].includes(c)) {
+      if (!Number.isInteger(qty) || qty < 1) errs.push("Quantity must be a whole number of at least 1.");
+      if (Number.isFinite(maxQty) && qty > maxQty) errs.push(`Quantity ${qty} is higher than your maximum ${maxQty}.`);
+    }
+    if (["PLACE","REVERSEPOSITION"].includes(c)) {
+      if (!acct) errs.push("Account is required.");
+      if (typ === "LIMIT" && !lim) errs.push("LIMIT requires a limit price.");
+      if (typ === "STOPMARKET" && !stop) errs.push("STOPMARKET requires a stop price.");
+      if (typ === "STOPLIMIT" && (!lim || !stop)) errs.push("STOPLIMIT requires both limit and stop prices.");
+    }
+    if (["CANCEL","CHANGE"].includes(c) && !$("orderId").value.trim()) errs.push(c + " requires an Order ID.");
+    if (c === "CLOSESTRATEGY" && !$("strategyId").value.trim()) errs.push("CLOSESTRATEGY requires a Strategy ID.");
+    if (acct && acct.toLowerCase() !== "sim101" && !$("liveAck").checked) errs.push("For a non-Sim101 account, check the live-account acknowledgment first.");
+    if (["CANCELALLORDERS","FLATTENEVERYTHING"].includes(c)) warns.push(c + " is a broad command that can affect more than one order/account in NinjaTrader.");
+    if (acct.toLowerCase() !== "sim101" && acct) warns.push("You entered a non-Sim101 account. Treat the exported file as potentially live.");
+    return {errs,warns};
+  }
+
+  function updateOif() {
+    $("oifPreview").textContent = buildOif();
+    const {errs,warns} = validateOif();
+    $("oifWarnings").innerHTML =
+      errs.map(x=>`<div class="p-2 my-1 bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-200 border-l-4 border-red-600">${x}</div>`).join("") +
+      warns.map(x=>`<div class="p-2 my-1 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 border-l-4 border-amber-500">${x}</div>`).join("");
+    return errs.length === 0;
+  }
+  oifIds.forEach(id => $(id).addEventListener("input", updateOif));
+  $("command").addEventListener("change", updateOif);
+  updateOif();
+
+  $("fillCurrent").onclick = () => {
+    if (!Number.isFinite(currentPrice)) return alert("No current MNQ price is loaded yet.");
+    $("limitPrice").value = currentPrice.toFixed(2);
+    updateOif();
+  };
+  $("copyOif").onclick = async () => {
+    await navigator.clipboard.writeText(buildOif());
+    $("copyOif").textContent="Copied";
+    setTimeout(()=>$("copyOif").textContent="Copy",1000);
+  };
+  function download(name, content, type="text/plain") {
+    const blob = new Blob([content], {type});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  }
+  $("exportOif").onclick = e => {
+    e.preventDefault();
+    if (!updateOif()) return alert("Fix the red validation messages before exporting.");
+    const stamp = new Date().toISOString().replace(/\D/g,"").slice(0,14);
+    download(`oif-mnq-${stamp}.txt`, buildOif()+"\n");
+  };
+  $("saveOifSettings").onclick = e => {
+    e.preventDefault();
+    const obj={};
+    oifIds.filter(x=>x!=="liveAck").forEach(k => obj[k]=$(k).value);
+    store.set("mnqOifSettings",obj);
+    alert("OIF settings saved in this browser.");
+  };
+  const savedOif=store.get("mnqOifSettings",null);
+  if(savedOif) Object.keys(savedOif).forEach(k=>{ if($(k)) $(k).value=savedOif[k]; });
+  updateOif();
+
+  // ---------- Trades ----------
+  let trades = store.get("mnqTrades",[]);
+  function escapeHtml(v){ return String(v??"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m])); }
+  function renderTrades(){
+    $("tradeRows").innerHTML = trades.length ? trades.map((t,i)=>`
+      <tr>
+        <td class="p-2 border dark:border-slate-700 whitespace-nowrap">${escapeHtml(t.datetime)}</td>
+        <td class="p-2 border dark:border-slate-700">MNQ</td>
+        <td class="p-2 border dark:border-slate-700">${escapeHtml(t.side)}</td>
+        <td class="p-2 border dark:border-slate-700">${escapeHtml(t.qty)}</td>
+        <td class="p-2 border dark:border-slate-700">${escapeHtml(t.type)}</td>
+        <td class="p-2 border dark:border-slate-700">${escapeHtml(t.limit)}</td>
+        <td class="p-2 border dark:border-slate-700">${escapeHtml(t.stop)}</td>
+        <td class="p-2 border dark:border-slate-700">${escapeHtml(t.status)}</td>
+        <td class="p-2 border dark:border-slate-700">${escapeHtml(t.notes)}</td>
+        <td class="p-2 border dark:border-slate-700"><button class="underline text-red-600" data-del-trade="${i}">Delete</button></td>
+      </tr>`).join("") :
+      `<tr><td colspan="10" class="p-4 text-center text-slate-500 border dark:border-slate-700">No trades added yet.</td></tr>`;
+    document.querySelectorAll("[data-del-trade]").forEach(b=>b.onclick=()=>{trades.splice(Number(b.dataset.delTrade),1);store.set("mnqTrades",trades);renderTrades();});
+  }
+  renderTrades();
+  $("tradeDate").value = new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
+  $("tradeForm").onsubmit = e => {
+    e.preventDefault();
+    trades.push({
+      datetime:$("tradeDate").value, side:$("tradeSide").value, qty:$("tradeQty").value,
+      type:$("tradeType").value, limit:$("tradeLimit").value, stop:$("tradeStop").value,
+      status:$("tradeStatus").value, notes:$("tradeNotes").value.trim()
+    });
+    store.set("mnqTrades",trades); renderTrades();
+  };
+  $("addTradeFromOif").onclick = () => {
+    trades.push({
+      datetime:new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16),
+      side:$("action").value, qty:$("qty").value, type:$("orderType").value,
+      limit:$("limitPrice").value, stop:$("stopPrice").value, status:"PLANNED",
+      notes:"Created from OIF builder: "+$("orderId").value
+    });
+    store.set("mnqTrades",trades); renderTrades();
+  };
+  $("clearTrades").onclick = () => {
+    if(confirm("Delete all saved trade-table rows from this browser?")) { trades=[]; store.set("mnqTrades",trades); renderTrades(); }
+  };
+  $("exportTrades").onclick = () => {
+    const q=v=>`"${String(v??"").replaceAll('"','""')}"`;
+    const rows=[["datetime","instrument","side","qty","type","limit","stop","status","notes"],
+      ...trades.map(t=>[t.datetime,"MNQ",t.side,t.qty,t.type,t.limit,t.stop,t.status,t.notes])];
+    download("mnq-trades.csv",rows.map(r=>r.map(q).join(",")).join("\n"),"text/csv");
+  };
+
+  // ---------- Historical CSV ----------
+  let history = store.get("mnqHistory",[]);
+  let chart = null;
+  function drawHistory(){
+    $("historyRows").innerHTML = history.slice(-1000).map(r=>{
+      const ch=r.close-r.open;
+      return `<tr><td class="p-2 border dark:border-slate-700">${escapeHtml(r.datetime)}</td>
+      <td class="p-2 border dark:border-slate-700 text-right">${r.open.toFixed(2)}</td>
+      <td class="p-2 border dark:border-slate-700 text-right">${r.close.toFixed(2)}</td>
+      <td class="p-2 border dark:border-slate-700 text-right">${ch>=0?"+":""}${ch.toFixed(2)}</td></tr>`
+    }).join("");
+    if(history.length){
+      const opens=history.map(x=>x.open), closes=history.map(x=>x.close);
+      $("csvStats").innerHTML = `<strong>${history.length}</strong> rows loaded.<br>First: ${escapeHtml(history[0].datetime)}<br>Last: ${escapeHtml(history.at(-1).datetime)}<br>Lowest close: ${Math.min(...closes).toFixed(2)}<br>Highest close: ${Math.max(...closes).toFixed(2)}`;
+    } else $("csvStats").textContent="No historical CSV loaded.";
+    const ctx=$("historyChart");
+    if(chart) chart.destroy();
+    const subset=history.length>2000 ? history.filter((_,i)=>i%Math.ceil(history.length/2000)===0) : history;
+    chart=new Chart(ctx,{
+      type:"line",
+      data:{labels:subset.map(x=>x.datetime),datasets:[
+        {label:"Open",data:subset.map(x=>x.open),borderWidth:1,pointRadius:0},
+        {label:"Close",data:subset.map(x=>x.close),borderWidth:2,pointRadius:0}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+        scales:{x:{display:subset.length<400,ticks:{maxTicksLimit:12}},y:{beginAtZero:false}}}
+    });
+  }
+  drawHistory();
+
+  function parseSimpleCsv(text){
+    const lines=text.replace(/^\uFEFF/,"").split(/\r?\n/).filter(x=>x.trim());
+    if(lines.length<2) throw new Error("CSV needs a header and at least one data row.");
+    const headers=lines[0].split(",").map(x=>x.trim().replace(/^"|"$/g,"").toLowerCase());
+    const idx=n=>headers.indexOf(n);
+    const oi=idx("open"), ci=idx("close"), dti=idx("datetime"), di=idx("date"), ti=idx("time");
+    if(oi<0 || ci<0 || (dti<0 && di<0)) throw new Error("Need open, close, and either datetime or date columns.");
+    const out=[];
+    for(let n=1;n<lines.length;n++){
+      const c=lines[n].split(",").map(x=>x.trim().replace(/^"|"$/g,""));
+      const open=Number(c[oi]), close=Number(c[ci]);
+      if(!Number.isFinite(open)||!Number.isFinite(close)) continue;
+      let dt=dti>=0?c[dti]:c[di]+(ti>=0?(" "+c[ti]):"");
+      out.push({datetime:dt,open,close});
+    }
+    if(!out.length) throw new Error("No valid numeric rows were found.");
+    return out;
+  }
+  $("csvFile").onchange = async e => {
+    const file=e.target.files[0]; if(!file) return;
+    try{
+      history=parseSimpleCsv(await file.text());
+      store.set("mnqHistory",history);
+      drawHistory();
+    }catch(err){ alert("CSV import error: "+err.message); }
+  };
+  $("clearHistory").onclick=()=>{ if(confirm("Clear imported historical data from this browser?")){history=[];store.set("mnqHistory",history);drawHistory();} };
+})();
+</script>
+</body>
+</html>
